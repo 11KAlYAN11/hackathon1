@@ -99,6 +99,14 @@ Sprint 2 adds zone awareness, capacity constraints, and weight classes. Sprint 3
 *Sprint 3 — SLA-triggered proactive loop:*
 `Order` has a nullable `slaDeadline` field. `AgentOfflineEvent` is a specific event type — but the async listener pattern is general. Sprint 3 adds an `SlaBreachEvent` published by a scheduler; `ReplanningService` adds a second `@EventListener` for it. The routing interface is already comfortable being called from a scheduler context — it takes order + agents + context, with no HTTP-specific coupling.
 
+**Additional runtime decisions**
+
+*Routing pool includes BUSY agents:* The initial implementation only considered AVAILABLE agents as candidates. Under load (multiple agents OFFLINE simultaneously), this caused all stranded orders to be routed to the single AVAILABLE agent. Changed to include BUSY agents in the candidate pool — the strategy now prefers AVAILABLE first, then BUSY sorted by active order count. This spreads load across the fleet rather than piling onto one agent.
+
+*Optimistic capacity reservation:* When the agentic loop generates a suggestion for Agent X, it immediately increments X's activeOrderCount in the DB. Subsequent orders in the same loop see X as "spoken for" and route to less-loaded agents. On REJECT, the reservation is released. On ACCEPT, the count is already correct — no double-increment. This prevents the "all 4 stranded orders recommend the same agent" pattern.
+
+*Auto-retry on suggestion rejection:* When ops rejects a suggestion, the system immediately generates a new PENDING suggestion (excluding the rejected agent from the candidate pool). The order never gets permanently stuck in REASSIGNMENT_PENDING with no active suggestion.
+
 **Deliberately deferred**
 
 *Full dispatch board (T5 ceiling):* Deferred in favour of completing the agentic loop correctly. The re-plan badge appearing after an agent goes offline is the core correctness requirement. The full dispatch board is a visibility enhancement. A clean floor that proves the loop works scores more in the rubric than a board built on a weaker backend.
@@ -106,3 +114,5 @@ Sprint 2 adds zone awareness, capacity constraints, and weight classes. Sprint 3
 *SSE token streaming (bonus T3):* Deferred — adds Flux/WebFlux complexity. The core AI integration with structured JSON output, fallback, and hallucination guard is more valuable to complete cleanly.
 
 *Auto-assignment on replan:* Explicitly not built. The system queues suggestions for ops to approve. Auto-assignment is a different system with a different trust model — it is not "more complete," it is a misunderstanding of the requirement.
+
+*Kafka/persistent event queue:* Not added. `ApplicationEventPublisher + @Async` is sufficient for this scope and is the pattern the brief itself recommends. Kafka would add operational complexity with no additional correctness benefit within the hackathon scope. If the JVM crashes mid-replan, suggestions are lost — this is acceptable and documented; sprint 3 could add a durable queue.
