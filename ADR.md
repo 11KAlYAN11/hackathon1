@@ -2,6 +2,27 @@
 
 ---
 
+## ADR-0: Technology stack choices
+
+**Context**
+Brief specified Spring Boot 3.x and React 18 or Angular 17. Remaining choices — event mechanism, database, LLM provider — were ours to make.
+
+**Decisions & why**
+
+| Choice | Alternatives considered | Reason chosen |
+|--------|------------------------|---------------|
+| Spring Boot 3.x | Quarkus, Micronaut | Brief requirement; `@Async` + `@EventListener` give agentic loop for free, `@Transactional` handles accept/reject atomicity, Actuator gives health/metrics |
+| React 18 + Vite | Angular 17 | Faster scaffold; `useState/useEffect` maps directly to 4s polling model; no RxJS overhead needed for this UI |
+| `ApplicationEventPublisher + @Async` | Kafka, CompletableFuture | Zero infra — no broker to run; brief recommends this pattern; same routing interface works when Sprint 3 swaps in Kafka |
+| H2 in-memory (local) | PostgreSQL locally | Zero setup — `./mvnw spring-boot:run` and seed data loads; prod uses PostgreSQL on Railway via `SPRING_PROFILES_ACTIVE=prod` |
+| Groq LLaMA 3.3 70B | Gemini Flash, Ollama | Free tier, fast responses, strong JSON output; `LLMGateway` is provider-agnostic — switching is 3 env vars |
+
+**Tradeoffs accepted**
+- `@Async` over Kafka → suggestions lost if JVM crashes mid-replan. Acceptable for sprint 1 scope; Sprint 3 adds durable queue with no routing interface changes.
+- H2 locally → schema drops on restart. Fine — seed data SQL reloads automatically.
+
+---
+
 ## ADR-1: Where does routing logic live?
 
 ```
