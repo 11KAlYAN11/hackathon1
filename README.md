@@ -1,140 +1,119 @@
 # ZipRun — AI Reassignment Engine
 
-> **Hackathon Submission** | Spring Boot 3.3 · React 18 · Groq LLaMA 70B · Prometheus · Grafana
+> Spring Boot 3.3 · React 18 · Groq LLaMA 3.3 70B · Java 17
 
-When a delivery agent goes **OFFLINE**, the system automatically detects all stranded orders, calls an AI to suggest the best available agent for each, and presents the ops team with one-click Accept / Reject cards — all within 3 seconds.
+When a delivery agent goes **OFFLINE**, ZipRun automatically detects all stranded orders, calls an AI to suggest the best available agent for each, and presents ops with one-click Accept / Reject cards — no one clicks a button to start it.
+
+**Live demo:** https://hackathon-frontend-nine.vercel.app  
+**Backend API:** https://hackathon-backend-production-6992.up.railway.app
 
 ---
 
-## Repository Structure
+## Repository Layout
 
 ```
 hackathon/
-├── hackathon/                  # Spring Boot 3.3.5 backend (Java 17)
-│   ├── src/main/java/          # Controllers, Services, Entities, Routing strategies
-│   └── src/main/resources/     # application.properties, application-prod.properties
-├── frontend/                   # React 18 + Vite + TypeScript dashboard
-├── monitoring/                 # Prometheus + Grafana config
-├── docker-compose.yml          # Postgres + Prometheus + Grafana (local infra)
-├── ADR.md                      # Architecture Decision Records
-├── EXPLANATION.md              # Problem & solution in plain English
-├── NAVIGATE.md                 # All API URLs + demo flow
-├── SETUP.md                    # Railway + Vercel deployment guide
-└── ZipRun.postman_collection.json  # Import into Postman for instant API testing
+├── hackathon/          # Spring Boot 3.3.5 backend (Java 17, Maven)
+├── frontend/           # React 18 + Vite + TypeScript
+├── monitoring/         # Prometheus + Grafana config
+├── ADR.md              # 5 Architecture Decision Records
+├── EXPLANATION.md      # Plain-English problem & solution
+├── WALKTHROUGH.md      # Interview Q&A prep (30 questions)
+└── ZipRun.postman_collection.json
 ```
 
 ---
 
-## Quick Start (Local Dev)
+## Local Setup — 5 Minutes
 
 ### Prerequisites
+- Java 17+ · Node 20+ · Maven (bundled via `mvnw`)
 
-| Tool | Version | Check |
-|------|---------|-------|
-| Java | 17+ | `java -version` |
-| Node.js | 20+ | `node -v` |
-| Docker (optional) | any | for Grafana/Prometheus |
-
-### 1. Start backend (IntelliJ or terminal)
+### 1. Backend
 
 ```bash
 cd hackathon/hackathon
-# Add env var: LLM_API_KEY=<your_groq_key>
 ./mvnw spring-boot:run
 ```
 
-Backend → **http://localhost:8080**  
-H2 Console → **http://localhost:8080/h2-console** (JDBC: `jdbc:h2:mem:hackathon`, user: `sa`, pass: blank)
+> No env vars needed — Groq key has a safe default for local dev.  
+> Backend: http://localhost:8080  
+> H2 Console: http://localhost:8080/h2-console (JDBC: `jdbc:h2:mem:hackathon`, user: `sa`, pass: blank)
 
-### 2. Start frontend
+### 2. Frontend
 
 ```bash
 cd hackathon/frontend
-npm install
-npm run dev
+npm install && npm run dev
 ```
 
-Frontend → **http://localhost:5173**
-
-### 3. (Optional) Start monitoring
-
-```bash
-docker compose up -d
-```
-
-Prometheus → **http://localhost:9090**  
-Grafana → **http://localhost:3001** (admin / admin)
+> Frontend: http://localhost:5173
 
 ---
 
-## Environment Variables
+## Demo Flow (The Money Shot)
 
-Copy `.env.example` to `.env` and fill in:
-
-```env
-LLM_API_KEY=your_groq_key_here
-LLM_PROVIDER=groq
-LLM_MODEL=llama-3.3-70b-versatile
 ```
-
-Supported LLM providers: `groq` · `gemini` · `ollama`
+1. Open http://localhost:5173 — see 5 agents, 8 assigned orders
+2. Click AGT-001 (Priya Sharma) → set OFFLINE
+3. Watch: 3 suggestion cards appear automatically within ~2 seconds
+4. Each card shows: recommended agent · confidence % · AI reasoning
+5. Click Accept on any card → order reassigned, agent counts update
+6. Click Reject → system auto-generates a new suggestion (excluding rejected agent)
+```
 
 ---
 
 ## API Reference
 
-No `/api` prefix — all endpoints are at root.
+No `/api` prefix. All endpoints at root.
 
 ### Agents
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/agents` | List all agents with status & order count |
-| GET | `/agents/{id}` | Single agent |
-| PATCH | `/agents/{id}/status?status=OFFLINE` | Take agent offline → triggers AI replan |
-| PATCH | `/agents/{id}/status?status=AVAILABLE` | Bring agent back online |
-| PATCH | `/agents/{id}/status?status=BUSY` | Mark agent busy |
+| Method | Endpoint | Notes |
+|--------|----------|-------|
+| GET | `/agents` | All agents with status & load |
+| PATCH | `/agents/{id}/status?status=OFFLINE` | **Triggers agentic replan** |
+| PATCH | `/agents/{id}/status?status=AVAILABLE` | Bring back online |
 
 ### Orders
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
+| Method | Endpoint | Notes |
+|--------|----------|-------|
 | GET | `/orders` | All orders |
-| GET | `/orders?status=REASSIGNMENT_PENDING` | Orders waiting for ops approval |
-| POST | `/orders/{id}/suggest` | On-demand AI suggestion for one order |
+| GET | `/orders?status=REASSIGNMENT_PENDING` | Stranded orders |
+| POST | `/orders` | `{"description":"...", "assignedAgentId":"AGT-002"}` |
+| POST | `/orders/{id}/suggest` | On-demand AI suggestion |
 
 ### Suggestions
+| Method | Endpoint | Notes |
+|--------|----------|-------|
+| GET | `/suggestions` | All with AI reasoning |
+| PATCH | `/suggestions/{id}` | `{"status":"ACCEPTED"}` or `{"status":"REJECTED"}` |
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/suggestions` | All suggestions with AI reasoning |
-| GET | `/suggestions?status=PENDING` | Pending suggestions only |
-| PATCH | `/suggestions/{id}` | Accept or reject `{"status":"ACCEPTED"}` |
+### AI Assistant
+| Method | Endpoint | Notes |
+|--------|----------|-------|
+| POST | `/assistant` | `{"message":"summarise fleet"}` → natural language ops |
 
 ### Health
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/actuator/health` | `{"status":"UP"}` |
-| GET | `/actuator/prometheus` | Raw Prometheus metrics |
+| Method | Endpoint |
+|--------|----------|
+| GET | `/actuator/health` |
+| GET | `/actuator/metrics` |
 
 ---
 
-## Seeded Demo Data
+## Seeded Data
 
-**5 Agents:**
-
-| ID | Name | Status | Active Orders |
-|----|------|--------|---------------|
+| ID | Name | Status | Orders |
+|----|------|--------|--------|
 | AGT-001 | Priya Sharma | BUSY | 2 |
 | AGT-002 | Rahul Verma | AVAILABLE | 0 |
 | AGT-003 | Ananya Iyer | BUSY | 1 |
 | AGT-004 | Kiran Nair | AVAILABLE | 0 |
 | AGT-005 | Deepak Mehta | BUSY | 3 |
 
-**8 Orders:** ORD-001 to ORD-008, all ASSIGNED on startup.
-
-Taking AGT-001 OFFLINE strands ORD-001, ORD-002, ORD-008 → 3 AI suggestions auto-generated.
+8 orders (ORD-001 → ORD-008) all ASSIGNED on startup.  
+Taking AGT-001 OFFLINE → strands ORD-001, ORD-002, ORD-008 → 3 AI suggestions auto-fire.
 
 ---
 
@@ -145,46 +124,55 @@ PATCH /agents/{id}/status?status=OFFLINE
         │
         ▼
 AgentService.updateStatus()
-   → publishes AgentOfflineEvent (non-blocking, returns 200 immediately)
-        │
-        ▼ (async background thread)
-ReplanningService @EventListener @Async
-   → for each stranded order:
-        ├── idempotency check (skip if PENDING suggestion already exists)
-        ├── AiRoutingStrategy → Groq API → {agentId, confidence, reasoning}
-        │      ├── hallucination guard: validate agentId exists
-        │      ├── JSON parse guard: catch malformed LLM response
-        │      └── fallback: RuleBasedStrategy (min activeOrderCount)
-        ├── save ReassignmentSuggestion (triggerReason=AGENT_OFFLINE)
-        └── update order status → REASSIGNMENT_PENDING
-        │
-        ▼
-React UI (polling every 4s)
-   → ops sees suggestion cards with confidence bar + AI reasoning
-   → clicks Accept → order = REASSIGNED, agent counts updated
+   └─ publishes AgentOfflineEvent ──► returns 200 immediately
+                │
+                ▼ (Spring @Async thread pool)
+        ReplanningService.onAgentOffline()
+                │
+                ├─ for each stranded order:
+                │     ├─ idempotency check (skip if PENDING already exists)
+                │     ├─ strategies.get("ai") → AiRoutingStrategy
+                │     │     ├─ build recovery prompt (NOT same as initial)
+                │     │     ├─ call Groq LLaMA 3.3 70B
+                │     │     ├─ validate agentId (hallucination guard)
+                │     │     └─ fallback → RuleBasedStrategy on any failure
+                │     ├─ optimistic reservation (increment agentCount in DB)
+                │     └─ save ReassignmentSuggestion(triggerReason=AGENT_OFFLINE)
+                │
+                ▼
+        React UI (polls every 4s)
+           └─ ops sees suggestion cards → Accept / Reject
+                     │
+                     ▼
+              SuggestionService.updateStatus()
+                ACCEPTED → order = REASSIGNED, count confirmed
+                REJECTED → reservation released, auto-retry with new agent
 ```
 
 ---
 
-## Design Decisions
+## Key Design Decisions
 
-See [ADR.md](ADR.md) for all 5 Architecture Decision Records covering:
-- Routing strategy location (backend vs frontend)
-- Runtime strategy switching without restart
-- LLM resilience (3-layer fallback)
-- Agentic loop trigger mechanism (events vs polling)
-- Extension seams for Sprint 2+
+| Decision | Choice | Why |
+|----------|--------|-----|
+| Routing pattern | `RoutingStrategy` interface + Strategy Pattern | Isolates concern; both callers (HTTP + async) use same contract |
+| Runtime switching | `Map<String, RoutingStrategy>` bean map | Spring auto-populates; new strategy = new class only |
+| LLM fallback | try/catch → rule-based | Keeps replan alive even when AI is down |
+| Async trigger | `ApplicationEventPublisher` + `@Async` | Event-driven (not polling); endpoint returns immediately |
+| Routing pool | All non-OFFLINE agents (AVAILABLE preferred, BUSY by load) | Prevents pile-on when multiple agents go offline |
+| Capacity reservation | Optimistic increment on suggestion create | Prevents all 3 stranded orders routing to same agent |
+
+Full reasoning in [ADR.md](ADR.md).
 
 ---
 
-## Deployment
+## Environment Variables (Production)
 
-See [SETUP.md](SETUP.md) for Railway (backend) and Vercel (frontend) step-by-step.
-
-Railway env vars to set:
-```
-LLM_API_KEY=<groq_key>
-LLM_PROVIDER=groq
-SPRING_PROFILES_ACTIVE=prod
-DB_URL=<railway_postgres_url>
-```
+| Variable | Example | Required |
+|----------|---------|----------|
+| `LLM_API_KEY` | `gsk_...` | Yes |
+| `LLM_PROVIDER` | `groq` | Yes |
+| `LLM_MODEL` | `llama-3.3-70b-versatile` | Yes |
+| `AI_BASE_URL` | `https://api.groq.com` | Yes |
+| `SPRING_PROFILES_ACTIVE` | `prod` | Yes (Railway) |
+| `DB_URL` | `jdbc:postgresql://...` | Yes (Railway) |
