@@ -29,7 +29,20 @@ export interface Suggestion {
   triggerReason: TriggerReason
 }
 
+export interface AssistantMessage {
+  role: 'user' | 'assistant'
+  text: string
+  actionType?: string
+}
+
 export const api = {
+  chat: (message: string): Promise<{ message: string; actionType: string; data: unknown }> =>
+    fetch(`${BASE}/assistant`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message }),
+    }).then(r => r.json()),
+
   getAgents: (): Promise<Agent[]> =>
     fetch(`${BASE}/agents`).then(r => r.json()),
 

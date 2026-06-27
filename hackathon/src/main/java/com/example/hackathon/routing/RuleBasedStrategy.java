@@ -34,17 +34,20 @@ public class RuleBasedStrategy implements RoutingStrategy {
         double loadAdvantage = maxLoad == 0 ? 1.0 : (double)(maxLoad - best.getActiveOrderCount()) / maxLoad;
         double confidence = Math.round((0.62 + 0.26 * loadAdvantage) * 100.0) / 100.0;
 
-        String statusNote = best.getStatus() == Agent.AgentStatus.AVAILABLE
-            ? "currently free"
-            : "lightest among BUSY agents";
+        double poolAvg = pool.stream().mapToInt(Agent::getActiveOrderCount).average().orElse(0);
+        int gap = (int) Math.round(poolAvg) - best.getActiveOrderCount();
+        String headroom = best.getStatus() == Agent.AgentStatus.AVAILABLE
+            ? "free" : "least loaded";
 
-        String reasoning = ("%s (%s, %d active orders) is the best fit — "
-            + "pool avg is %.1f orders across %d agent%s. "
-            + "Assigning here minimises delay risk without overloading any single agent.")
+        String reasoning = ("%s · %d active orders vs fleet avg %.1f — %s by %d order%s. "
+            + "Optimal fit to keep queue pressure balanced.")
             .formatted(
-                best.getName(), statusNote, best.getActiveOrderCount(),
-                pool.stream().mapToInt(Agent::getActiveOrderCount).average().orElse(0),
-                pool.size(), pool.size() == 1 ? "" : "s"
+                best.getName(),
+                best.getActiveOrderCount(),
+                poolAvg,
+                headroom,
+                Math.abs(gap),
+                Math.abs(gap) == 1 ? "" : "s"
             );
 
         return RoutingResult.builder()

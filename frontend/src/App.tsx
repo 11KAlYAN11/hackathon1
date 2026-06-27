@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from 'react'
-import { api, Agent, Suggestion, Order, AgentStatus, SuggestionStatus } from './api'
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { api, Agent, Suggestion, Order, AgentStatus, SuggestionStatus, AssistantMessage } from './api'
 
 const ORDER_PRESETS = [
   'Electronics — Koramangala to Indiranagar',
@@ -29,6 +29,13 @@ export default function App() {
   const [newDesc, setNewDesc]         = useState('')
   const [newAgent, setNewAgent]       = useState('')
   const [creating, setCreating]       = useState(false)
+  const [showAssistant, setShowAssistant] = useState(false)
+  const [chatMessages, setChatMessages]   = useState<AssistantMessage[]>([
+    { role: 'assistant', text: '👋 Hi! I can create orders, summarise the fleet, recommend agents, or answer questions. Try a quick action below or type anything.' }
+  ])
+  const [chatInput, setChatInput]   = useState('')
+  const [chatLoading, setChatLoading] = useState(false)
+  const chatEndRef = useRef<HTMLDivElement>(null)
 
   const fetchAll = useCallback(async () => {
     try {
@@ -77,6 +84,24 @@ export default function App() {
     }
   }
 
+  const sendChat = async (text: string) => {
+    if (!text.trim() || chatLoading) return
+    const userMsg: AssistantMessage = { role: 'user', text }
+    setChatMessages(m => [...m, userMsg])
+    setChatInput('')
+    setChatLoading(true)
+    try {
+      const res = await api.chat(text)
+      setChatMessages(m => [...m, { role: 'assistant', text: res.message, actionType: res.actionType }])
+      if (res.actionType === 'ORDER_CREATED') await fetchAll()
+    } catch {
+      setChatMessages(m => [...m, { role: 'assistant', text: 'Something went wrong. Please try again.' }])
+    } finally {
+      setChatLoading(false)
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
+    }
+  }
+
   const handleCreateOrder = async () => {
     if (!newDesc.trim()) return
     setCreating(true)
@@ -113,6 +138,9 @@ export default function App() {
             Auto-refresh every {POLL_MS / 1000}s · Last: {lastRefresh.toLocaleTimeString()}
           </span>
           <button className="btn-new-order" onClick={() => setShowNewOrder(true)}>+ New Order</button>
+          <button className="btn-assistant" onClick={() => setShowAssistant(v => !v)}>
+            {showAssistant ? '✕ Close AI' : '✦ AI Assistant'}
+          </button>
         </div>
       </div>
 
@@ -179,6 +207,69 @@ export default function App() {
           )}
         </main>
       </div>
+
+      {/* ── AI ASSISTANT PANEL ── */}
+      {showAssistant && (
+        <div className="assistant-panel">
+          <div className="assistant-header">
+            <span>✦ ZipRun AI Assistant</span>
+            <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>Powered by LLaMA 70B</span>
+          </div>
+
+          <div className="assistant-quick-actions">
+            {[
+              { icon: '📊', label: 'Fleet Summary',     msg: 'Give me a summary of the current fleet and order status' },
+              { icon: '📦', label: 'Create Order',      msg: 'Create a new order for electronics delivery from Koramangala to Indiranagar and assign to best agent' },
+              { icon: '🏆', label: 'Best Agent Now',    msg: 'Which agent is best suited to take a new order right now and why?' },
+              { icon: '⚡', label: 'Pending Issues',    msg: 'Are there any orders needing urgent attention or reassignment?' },
+              { icon: '📈', label: 'Load Analysis',     msg: 'Analyse the current load distribution across agents and suggest rebalancing if needed' },
+              { icon: '🔄', label: 'Recovery Status',   msg: 'Are there any offline agents with stranded orders that still need reassignment?' },
+            ].map(q => (
+              <button key={q.label} className="quick-action-btn" onClick={() => sendChat(q.msg)}>
+                <span className="quick-action-icon">{q.icon}</span>
+                <span>{q.label}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="assistant-messages">
+            {chatMessages.map((m, i) => (
+              <div key={i} className={`chat-msg ${m.role}`}>
+                {m.role === 'assistant' && <span className="chat-avatar">✦</span>}
+                <div className="chat-bubble">
+                  {m.text}
+                  {m.actionType === 'ORDER_CREATED' && (
+                    <div className="chat-action-badge">✅ Order created & assigned</div>
+                  )}
+                </div>
+              </div>
+            ))}
+            {chatLoading && (
+              <div className="chat-msg assistant">
+                <span className="chat-avatar">✦</span>
+                <div className="chat-bubble chat-thinking">Thinking<span className="dots">...</span></div>
+              </div>
+            )}
+            <div ref={chatEndRef} />
+          </div>
+
+          <div className="assistant-input-row">
+            <input
+              className="assistant-input"
+              placeholder="Ask anything about the fleet, create orders, get recommendations…"
+              value={chatInput}
+              onChange={e => setChatInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && sendChat(chatInput)}
+              disabled={chatLoading}
+            />
+            <button
+              className="assistant-send"
+              onClick={() => sendChat(chatInput)}
+              disabled={chatLoading || !chatInput.trim()}
+            >↑</button>
+          </div>
+        </div>
+      )}
 
       {/* ── NEW ORDER MODAL ── */}
       {showNewOrder && (
