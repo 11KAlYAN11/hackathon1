@@ -1,127 +1,190 @@
-# Hackathon — Agentic Ticket Routing System
+# ZipRun — AI Reassignment Engine
 
-A Spring Boot 3 + React (Vite) application with LLM-powered agent routing, real-time SSE events, and full observability via Prometheus + Grafana.
+> **Hackathon Submission** | Spring Boot 3.3 · React 18 · Groq LLaMA 70B · Prometheus · Grafana
+
+When a delivery agent goes **OFFLINE**, the system automatically detects all stranded orders, calls an AI to suggest the best available agent for each, and presents the ops team with one-click Accept / Reject cards — all within 3 seconds.
+
+---
 
 ## Repository Structure
 
 ```
 hackathon/
-├── hackathon/          # Spring Boot backend
-├── frontend/           # React 18 + Vite frontend
-├── monitoring/         # Prometheus + Grafana config
-├── docker-compose.yml  # Local Postgres + Prometheus + Grafana
-└── .env.example        # Environment variable template
+├── hackathon/                  # Spring Boot 3.3.5 backend (Java 17)
+│   ├── src/main/java/          # Controllers, Services, Entities, Routing strategies
+│   └── src/main/resources/     # application.properties, application-prod.properties
+├── frontend/                   # React 18 + Vite + TypeScript dashboard
+├── monitoring/                 # Prometheus + Grafana config
+├── docker-compose.yml          # Postgres + Prometheus + Grafana (local infra)
+├── ADR.md                      # Architecture Decision Records
+├── EXPLANATION.md              # Problem & solution in plain English
+├── NAVIGATE.md                 # All API URLs + demo flow
+├── SETUP.md                    # Railway + Vercel deployment guide
+└── ZipRun.postman_collection.json  # Import into Postman for instant API testing
 ```
 
-## Quick Start (Local)
+---
 
-### 1. Prerequisites
+## Quick Start (Local Dev)
+
+### Prerequisites
 
 | Tool | Version | Check |
 |------|---------|-------|
 | Java | 17+ | `java -version` |
-| Maven | 3.9+ | `mvn -version` |
 | Node.js | 20+ | `node -v` |
-| Docker | any | `docker --version` |
+| Docker (optional) | any | for Grafana/Prometheus |
 
-### 2. Start infrastructure
+### 1. Start backend (IntelliJ or terminal)
+
+```bash
+cd hackathon/hackathon
+# Add env var: LLM_API_KEY=<your_groq_key>
+./mvnw spring-boot:run
+```
+
+Backend → **http://localhost:8080**  
+H2 Console → **http://localhost:8080/h2-console** (JDBC: `jdbc:h2:mem:hackathon`, user: `sa`, pass: blank)
+
+### 2. Start frontend
+
+```bash
+cd hackathon/frontend
+npm install
+npm run dev
+```
+
+Frontend → **http://localhost:5173**
+
+### 3. (Optional) Start monitoring
 
 ```bash
 docker compose up -d
 ```
 
-This starts PostgreSQL (5432), Prometheus (9090), and Grafana (3001).
+Prometheus → **http://localhost:9090**  
+Grafana → **http://localhost:3001** (admin / admin)
 
-### 3. Start backend
+---
 
-```bash
-cd hackathon
-export LLM_API_KEY=your_groq_key_here
-./mvnw spring-boot:run
+## Environment Variables
+
+Copy `.env.example` to `.env` and fill in:
+
+```env
+LLM_API_KEY=your_groq_key_here
+LLM_PROVIDER=groq
+LLM_MODEL=llama-3.3-70b-versatile
 ```
 
-Backend runs on `http://localhost:8080`
+Supported LLM providers: `groq` · `gemini` · `ollama`
 
-### 4. Start frontend
+---
 
-```bash
-cd frontend
-cp .env.example .env.local   # already done — VITE_API_BASE_URL=http://localhost:8080
-npm install
-npm run dev
-```
+## API Reference
 
-Frontend runs on `http://localhost:5173`
+No `/api` prefix — all endpoints are at root.
 
-## API Endpoints
+### Agents
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/agents` | List all agents |
-| GET | `/api/agents/online` | List online agents only |
-| POST | `/api/agents` | Create agent |
-| PATCH | `/api/agents/{agentId}/status?status=OFFLINE` | Update agent status |
-| GET | `/api/tickets` | List all tickets |
-| GET | `/api/tickets/{id}` | Get ticket by ID |
-| POST | `/api/tickets` | Create ticket (triggers LLM routing) |
-| POST | `/api/tickets/{id}/suggestions/{sid}/accept` | Accept routing suggestion |
-| POST | `/api/tickets/{id}/replan` | Re-run routing (agent went offline) |
-| GET | `/api/events` | SSE stream (agent-offline, replan, ticket-assigned) |
-| GET | `/actuator/health` | Health check |
-| GET | `/actuator/prometheus` | Prometheus metrics |
+| GET | `/agents` | List all agents with status & order count |
+| GET | `/agents/{id}` | Single agent |
+| PATCH | `/agents/{id}/status?status=OFFLINE` | Take agent offline → triggers AI replan |
+| PATCH | `/agents/{id}/status?status=AVAILABLE` | Bring agent back online |
+| PATCH | `/agents/{id}/status?status=BUSY` | Mark agent busy |
 
-## LLM Routing
+### Orders
 
-On ticket creation the system automatically:
-1. Fetches all online agents and their skills
-2. Sends a structured prompt to the LLM
-3. Parses the response: `{"agentId":"...","confidence":0.85,"reasoning":"..."}`
-4. Persists the suggestion — **ops must accept it, it is never auto-assigned**
-5. If the suggested agent goes offline, call `/replan` to get a new suggestion
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/orders` | All orders |
+| GET | `/orders?status=REASSIGNMENT_PENDING` | Orders waiting for ops approval |
+| POST | `/orders/{id}/suggest` | On-demand AI suggestion for one order |
 
-Supported providers (set via `LLM_PROVIDER` env var):
+### Suggestions
 
-| Provider | `LLM_PROVIDER` | Free tier |
-|----------|---------------|-----------|
-| Groq + Llama 3.3 | `groq` | Yes |
-| Gemini 1.5 Flash | `gemini` | Yes |
-| Ollama (local) | `ollama` | No API key needed |
-| OpenAI | `openai` | No |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/suggestions` | All suggestions with AI reasoning |
+| GET | `/suggestions?status=PENDING` | Pending suggestions only |
+| PATCH | `/suggestions/{id}` | Accept or reject `{"status":"ACCEPTED"}` |
 
-## Real-time Events (SSE)
+### Health
 
-Connect to `GET /api/events` (text/event-stream). Events emitted:
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/actuator/health` | `{"status":"UP"}` |
+| GET | `/actuator/prometheus` | Raw Prometheus metrics |
 
-| Event name | Data | When |
-|------------|------|------|
-| `agent-offline` | `agentId` | Agent status → OFFLINE |
-| `agent-online` | `agentId` | Agent status → ONLINE |
-| `replan` | `ticketId:agentId` | Replan triggered |
-| `ticket-assigned` | `ticketId:agentId` | Suggestion accepted |
+---
 
-## Seeded Data
+## Seeded Demo Data
 
-On startup 5 agents are seeded automatically:
+**5 Agents:**
 
-| agentId | Name | Skills |
-|---------|------|--------|
-| agent-001 | Alice Kumar | billing, payments, refunds |
-| agent-002 | Bob Mensah | technical, debugging, api |
-| agent-003 | Carol Zhang | onboarding, account, kyc |
-| agent-004 | David Osei | escalation, legal, compliance |
-| agent-005 | Eva Petrov | billing, technical, general |
+| ID | Name | Status | Active Orders |
+|----|------|--------|---------------|
+| AGT-001 | Priya Sharma | BUSY | 2 |
+| AGT-002 | Rahul Verma | AVAILABLE | 0 |
+| AGT-003 | Ananya Iyer | BUSY | 1 |
+| AGT-004 | Kiran Nair | AVAILABLE | 0 |
+| AGT-005 | Deepak Mehta | BUSY | 3 |
 
-## Observability
+**8 Orders:** ORD-001 to ORD-008, all ASSIGNED on startup.
 
-| URL | Tool |
-|-----|------|
-| `http://localhost:9090` | Prometheus |
-| `http://localhost:3001` | Grafana (admin/admin) |
-| `http://localhost:8080/actuator/prometheus` | Raw metrics |
-| `http://localhost:8080/h2-console` | H2 DB console (local only) |
+Taking AGT-001 OFFLINE strands ORD-001, ORD-002, ORD-008 → 3 AI suggestions auto-generated.
 
-Import Grafana dashboard ID **19004** for a full Spring Boot 3 dashboard.
+---
+
+## Architecture
+
+```
+PATCH /agents/{id}/status?status=OFFLINE
+        │
+        ▼
+AgentService.updateStatus()
+   → publishes AgentOfflineEvent (non-blocking, returns 200 immediately)
+        │
+        ▼ (async background thread)
+ReplanningService @EventListener @Async
+   → for each stranded order:
+        ├── idempotency check (skip if PENDING suggestion already exists)
+        ├── AiRoutingStrategy → Groq API → {agentId, confidence, reasoning}
+        │      ├── hallucination guard: validate agentId exists
+        │      ├── JSON parse guard: catch malformed LLM response
+        │      └── fallback: RuleBasedStrategy (min activeOrderCount)
+        ├── save ReassignmentSuggestion (triggerReason=AGENT_OFFLINE)
+        └── update order status → REASSIGNMENT_PENDING
+        │
+        ▼
+React UI (polling every 4s)
+   → ops sees suggestion cards with confidence bar + AI reasoning
+   → clicks Accept → order = REASSIGNED, agent counts updated
+```
+
+---
+
+## Design Decisions
+
+See [ADR.md](ADR.md) for all 5 Architecture Decision Records covering:
+- Routing strategy location (backend vs frontend)
+- Runtime strategy switching without restart
+- LLM resilience (3-layer fallback)
+- Agentic loop trigger mechanism (events vs polling)
+- Extension seams for Sprint 2+
+
+---
 
 ## Deployment
 
-See [SETUP.md](SETUP.md) for Railway (backend) and Vercel (frontend) deployment instructions.
+See [SETUP.md](SETUP.md) for Railway (backend) and Vercel (frontend) step-by-step.
+
+Railway env vars to set:
+```
+LLM_API_KEY=<groq_key>
+LLM_PROVIDER=groq
+SPRING_PROFILES_ACTIVE=prod
+DB_URL=<railway_postgres_url>
+```

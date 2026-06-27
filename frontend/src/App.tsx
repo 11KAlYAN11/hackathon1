@@ -1,6 +1,19 @@
 import { useEffect, useState, useCallback } from 'react'
 import { api, Agent, Suggestion, Order, AgentStatus, SuggestionStatus } from './api'
 
+const ORDER_PRESETS = [
+  'Electronics — Koramangala to Indiranagar',
+  'Groceries — HSR Layout to BTM',
+  'Pharma — Whitefield to Marathahalli',
+  'Documents — MG Road to Jayanagar',
+  'Food — Bellandur to Electronic City',
+  'Apparel — Malleshwaram to Rajajinagar',
+  'Fragile — Indiranagar to Ulsoor',
+  'Medicine — Hebbal to Yelahanka',
+  'Laptop — Whitefield to HSR Layout',
+  'Flowers — JP Nagar to Koramangala',
+]
+
 const POLL_MS = 4000
 
 export default function App() {
@@ -10,8 +23,12 @@ export default function App() {
   const [tab, setTab]               = useState<'pending' | 'all'>('pending')
   const [loading, setLoading]       = useState(true)
   const [error, setError]           = useState('')
-  const [acting, setActing]         = useState<number | null>(null)
+  const [acting, setActing]           = useState<number | null>(null)
   const [lastRefresh, setLastRefresh] = useState(new Date())
+  const [showNewOrder, setShowNewOrder] = useState(false)
+  const [newDesc, setNewDesc]         = useState('')
+  const [newAgent, setNewAgent]       = useState('')
+  const [creating, setCreating]       = useState(false)
 
   const fetchAll = useCallback(async () => {
     try {
@@ -60,8 +77,29 @@ export default function App() {
     }
   }
 
+  const handleCreateOrder = async () => {
+    if (!newDesc.trim()) return
+    setCreating(true)
+    try {
+      await api.createOrder(newDesc.trim(), newAgent || undefined)
+      setShowNewOrder(false)
+      setNewDesc('')
+      setNewAgent('')
+      await fetchAll()
+    } catch {
+      setError('Failed to create order')
+    } finally {
+      setCreating(false)
+    }
+  }
+
   const pending = suggestions.filter(s => s.status === 'PENDING')
   const replanCount = pending.filter(s => s.triggerReason === 'AGENT_OFFLINE').length
+  // Orders stuck in REASSIGNMENT_PENDING with no active suggestion (e.g. all suggestions rejected and retry failed)
+  const stuckOrders = allOrders.filter(o =>
+    o.status === 'REASSIGNMENT_PENDING' &&
+    !pending.some(s => s.order.id === o.id)
+  )
 
   return (
     <div className="app">
@@ -70,9 +108,12 @@ export default function App() {
           <span className="topbar-title">ZipRun · Ops Console</span>
           <span className="topbar-sub" style={{ marginLeft: 16 }}>AI Reassignment Engine</span>
         </div>
-        <span className="topbar-poll">
-          Auto-refresh every {POLL_MS / 1000}s · Last: {lastRefresh.toLocaleTimeString()}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <span className="topbar-poll">
+            Auto-refresh every {POLL_MS / 1000}s · Last: {lastRefresh.toLocaleTimeString()}
+          </span>
+          <button className="btn-new-order" onClick={() => setShowNewOrder(true)}>+ New Order</button>
+        </div>
       </div>
 
       <div className="main">
@@ -129,6 +170,7 @@ export default function App() {
           ) : tab === 'pending' ? (
             <PendingTab
               suggestions={pending}
+              stuckOrders={stuckOrders}
               acting={acting}
               onAction={handleSuggestion}
             />
@@ -137,17 +179,56 @@ export default function App() {
           )}
         </main>
       </div>
+
+      {/* ── NEW ORDER MODAL ── */}
+      {showNewOrder && (
+        <div className="modal-overlay" onClick={() => setShowNewOrder(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-title">Create New Order</div>
+
+            <label className="modal-label">Description</label>
+            <input
+              className="modal-input"
+              placeholder="e.g. Electronics — Koramangala to Indiranagar"
+              value={newDesc}
+              onChange={e => setNewDesc(e.target.value)}
+              list="desc-presets"
+            />
+            <datalist id="desc-presets">
+              {ORDER_PRESETS.map(p => <option key={p} value={p} />)}
+            </datalist>
+
+            <label className="modal-label" style={{ marginTop: 12 }}>Assign to Agent <span style={{ fontWeight: 400, color: 'var(--text-dim)' }}>(optional — auto-picks lightest load)</span></label>
+            <select className="modal-input" value={newAgent} onChange={e => setNewAgent(e.target.value)}>
+              <option value="">Auto-assign</option>
+              {agents.filter(a => a.status !== 'OFFLINE').map(a => (
+                <option key={a.id} value={a.id}>
+                  {a.name} ({a.activeOrderCount} orders · {a.status})
+                </option>
+              ))}
+            </select>
+
+            <div className="modal-actions">
+              <button className="btn btn-accept" onClick={handleCreateOrder} disabled={creating || !newDesc.trim()}>
+                {creating ? 'Creating…' : 'Create Order'}
+              </button>
+              <button className="btn btn-reject" onClick={() => setShowNewOrder(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 // ── Pending suggestions tab ────────────────────────────────────────────────
-function PendingTab({ suggestions, acting, onAction }: {
+function PendingTab({ suggestions, stuckOrders, acting, onAction }: {
   suggestions: Suggestion[]
+  stuckOrders: Order[]
   acting: number | null
   onAction: (id: number, status: SuggestionStatus) => void
 }) {
-  if (suggestions.length === 0) {
+  if (suggestions.length === 0 && stuckOrders.length === 0) {
     return (
       <div className="empty-state">
         <div className="empty-icon">✅</div>
@@ -167,6 +248,18 @@ function PendingTab({ suggestions, acting, onAction }: {
           onAccept={() => onAction(s.id, 'ACCEPTED')}
           onReject={() => onAction(s.id, 'REJECTED')}
         />
+      ))}
+      {stuckOrders.map(o => (
+        <div key={o.id} className="suggestion-card" style={{ borderLeft: '4px solid #ff8b00' }}>
+          <div className="card-header">
+            <span className="order-id">{o.id}</span>
+            <span className="order-desc">{o.description}</span>
+            <span className="trigger-badge AGENT_OFFLINE">⚠ Awaiting Agent — All Suggestions Rejected</span>
+          </div>
+          <div style={{ padding: '12px 0', color: '#6b778c', fontSize: 13 }}>
+            No active AI suggestion. A retry is being generated — please wait a few seconds and this will refresh automatically.
+          </div>
+        </div>
       ))}
     </>
   )

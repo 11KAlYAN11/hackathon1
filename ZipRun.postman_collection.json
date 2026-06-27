@@ -1,0 +1,529 @@
+{
+  "info": {
+    "name": "ZipRun AI Reassignment Engine",
+    "description": "Complete API collection for ZipRun hackathon — Agents, Orders, Suggestions",
+    "_postman_id": "ziprun-ai-reassignment-2024",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "http://localhost:8080",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Agents",
+      "item": [
+        {
+          "name": "Get All Agents",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/agents",
+              "host": ["{{BASE_URL}}"],
+              "path": ["agents"]
+            },
+            "description": "Returns all 5 delivery agents with their current status and active order count."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Agent by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/agents/AGT-001",
+              "host": ["{{BASE_URL}}"],
+              "path": ["agents", "AGT-001"]
+            },
+            "description": "Get a single agent. Try AGT-001 through AGT-005."
+          },
+          "response": []
+        },
+        {
+          "name": "Take Agent OFFLINE (triggers agentic loop)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/agents/AGT-001/status?status=OFFLINE",
+              "host": ["{{BASE_URL}}"],
+              "path": ["agents", "AGT-001", "status"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "OFFLINE"
+                }
+              ]
+            },
+            "description": "Takes AGT-001 (Priya Sharma) OFFLINE. Backend immediately publishes an AgentOfflineEvent. The async agentic loop picks up all ASSIGNED orders for that agent and auto-creates AI reassignment suggestions. Watch /suggestions fill up within ~2 seconds."
+          },
+          "response": []
+        },
+        {
+          "name": "Set Agent AVAILABLE",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/agents/AGT-001/status?status=AVAILABLE",
+              "host": ["{{BASE_URL}}"],
+              "path": ["agents", "AGT-001", "status"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "AVAILABLE"
+                }
+              ]
+            },
+            "description": "Brings AGT-001 back online."
+          },
+          "response": []
+        },
+        {
+          "name": "Take AGT-002 OFFLINE",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/agents/AGT-002/status?status=OFFLINE",
+              "host": ["{{BASE_URL}}"],
+              "path": ["agents", "AGT-002", "status"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "OFFLINE"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Set Agent BUSY",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/agents/AGT-003/status?status=BUSY",
+              "host": ["{{BASE_URL}}"],
+              "path": ["agents", "AGT-003", "status"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "BUSY"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "Get All Orders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/orders",
+              "host": ["{{BASE_URL}}"],
+              "path": ["orders"]
+            },
+            "description": "Returns all 8 orders with their current status and assigned agent."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Orders — ASSIGNED only",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/orders?status=ASSIGNED",
+              "host": ["{{BASE_URL}}"],
+              "path": ["orders"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "ASSIGNED"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Orders — REASSIGNMENT_PENDING",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/orders?status=REASSIGNMENT_PENDING",
+              "host": ["{{BASE_URL}}"],
+              "path": ["orders"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "REASSIGNMENT_PENDING"
+                }
+              ]
+            },
+            "description": "Orders waiting for ops team to approve a reassignment suggestion."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Orders — REASSIGNED",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/orders?status=REASSIGNED",
+              "host": ["{{BASE_URL}}"],
+              "path": ["orders"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "REASSIGNED"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Manually trigger AI suggestion for one order",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/orders/ORD-001/suggest",
+              "host": ["{{BASE_URL}}"],
+              "path": ["orders", "ORD-001", "suggest"]
+            },
+            "description": "On-demand AI suggestion for a specific order. Creates a suggestion with triggerReason=INITIAL (shown as 🔍 On-demand badge in UI). Different from the agentic loop which uses AGENT_OFFLINE."
+          },
+          "response": []
+        },
+        {
+          "name": "Manually trigger AI suggestion — ORD-005",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/orders/ORD-005/suggest",
+              "host": ["{{BASE_URL}}"],
+              "path": ["orders", "ORD-005", "suggest"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Suggestions",
+      "item": [
+        {
+          "name": "Get All Suggestions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/suggestions",
+              "host": ["{{BASE_URL}}"],
+              "path": ["suggestions"]
+            },
+            "description": "Returns all reassignment suggestions with order, recommended agent, confidence score, AI reasoning, and status."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Suggestions — PENDING only",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/suggestions?status=PENDING",
+              "host": ["{{BASE_URL}}"],
+              "path": ["suggestions"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "PENDING"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Accept a Suggestion",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACCEPTED\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/suggestions/1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["suggestions", "1"]
+            },
+            "description": "Ops approves the AI suggestion. This: (1) marks suggestion ACCEPTED, (2) decrements old agent activeOrderCount, (3) increments new agent activeOrderCount, (4) updates order status to REASSIGNED."
+          },
+          "response": []
+        },
+        {
+          "name": "Reject a Suggestion",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"REJECTED\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/suggestions/1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["suggestions", "1"]
+            },
+            "description": "Ops rejects the AI suggestion. Suggestion marked REJECTED. Order remains REASSIGNMENT_PENDING so ops can manually handle it."
+          },
+          "response": []
+        },
+        {
+          "name": "Accept Suggestion #2",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACCEPTED\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/suggestions/2",
+              "host": ["{{BASE_URL}}"],
+              "path": ["suggestions", "2"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Accept Suggestion #3",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACCEPTED\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/suggestions/3",
+              "host": ["{{BASE_URL}}"],
+              "path": ["suggestions", "3"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Health & Monitoring",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/actuator/health",
+              "host": ["{{BASE_URL}}"],
+              "path": ["actuator", "health"]
+            },
+            "description": "Spring Boot Actuator health. Should return {\"status\":\"UP\"}."
+          },
+          "response": []
+        },
+        {
+          "name": "Prometheus Metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/actuator/prometheus",
+              "host": ["{{BASE_URL}}"],
+              "path": ["actuator", "prometheus"]
+            },
+            "description": "Raw Prometheus scrape endpoint. Grafana polls this every 5s via docker-compose."
+          },
+          "response": []
+        },
+        {
+          "name": "All Actuator Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/actuator/info",
+              "host": ["{{BASE_URL}}"],
+              "path": ["actuator", "info"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Full Demo Flow (run in order)",
+      "item": [
+        {
+          "name": "STEP 1 — Check all agents",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/agents",
+              "host": ["{{BASE_URL}}"],
+              "path": ["agents"]
+            },
+            "description": "Confirm 5 agents: Priya (BUSY/2 orders), Rahul (AVAILABLE), Ananya (BUSY/1), Kiran (AVAILABLE), Deepak (BUSY/3)"
+          },
+          "response": []
+        },
+        {
+          "name": "STEP 2 — Check all orders (all ASSIGNED)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/orders",
+              "host": ["{{BASE_URL}}"],
+              "path": ["orders"]
+            },
+            "description": "All 8 orders should be ASSIGNED at this point."
+          },
+          "response": []
+        },
+        {
+          "name": "STEP 3 — Take Priya OFFLINE (agentic loop fires!)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/agents/AGT-001/status?status=OFFLINE",
+              "host": ["{{BASE_URL}}"],
+              "path": ["agents", "AGT-001", "status"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "OFFLINE"
+                }
+              ]
+            },
+            "description": "This returns instantly. Behind the scenes, async thread picks up ORD-001, ORD-002, ORD-008 and calls AI for each."
+          },
+          "response": []
+        },
+        {
+          "name": "STEP 4 — Check suggestions (wait 2-3 seconds first)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/suggestions",
+              "host": ["{{BASE_URL}}"],
+              "path": ["suggestions"]
+            },
+            "description": "Should see 3 suggestions with triggerReason=AGENT_OFFLINE, each with AI confidence and reasoning."
+          },
+          "response": []
+        },
+        {
+          "name": "STEP 5 — Accept suggestion for ORD-001",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACCEPTED\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/suggestions/1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["suggestions", "1"]
+            },
+            "description": "Ops approves. Order moves to REASSIGNED, new agent's count increments."
+          },
+          "response": []
+        },
+        {
+          "name": "STEP 6 — Confirm ORD-001 is now REASSIGNED",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/orders?status=REASSIGNED",
+              "host": ["{{BASE_URL}}"],
+              "path": ["orders"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "REASSIGNED"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "STEP 7 — Confirm agent counts updated",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/agents",
+              "host": ["{{BASE_URL}}"],
+              "path": ["agents"]
+            },
+            "description": "New agent should have activeOrderCount incremented. Priya stays OFFLINE."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

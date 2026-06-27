@@ -41,9 +41,13 @@ public class AgentService {
         Agent saved = agentRepository.save(agent);
 
         if (previous != Agent.AgentStatus.OFFLINE && newStatus == Agent.AgentStatus.OFFLINE) {
+            // Include ASSIGNED, REASSIGNED, and REASSIGNMENT_PENDING —
+            // an agent can go offline again after already receiving reassigned orders
             List<String> affected = orderRepository.findByAssignedAgentId(agentId)
                 .stream()
-                .filter(o -> o.getStatus() == Order.OrderStatus.ASSIGNED)
+                .filter(o -> o.getStatus() == Order.OrderStatus.ASSIGNED
+                          || o.getStatus() == Order.OrderStatus.REASSIGNED
+                          || o.getStatus() == Order.OrderStatus.REASSIGNMENT_PENDING)
                 .map(Order::getId)
                 .toList();
 

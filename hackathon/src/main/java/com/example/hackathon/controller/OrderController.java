@@ -3,6 +3,7 @@ package com.example.hackathon.controller;
 import com.example.hackathon.entity.Order;
 import com.example.hackathon.entity.ReassignmentSuggestion;
 import com.example.hackathon.service.OrderService;
+import com.example.hackathon.service.OrderService.OrderCreateRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -23,8 +24,8 @@ public class OrderController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public Order create(@RequestBody Order order) {
-        return orderService.create(order);
+    public Order create(@RequestBody OrderService.OrderCreateRequest req) {
+        return orderService.create(req);
     }
 
     @PostMapping("/{id}/suggest")

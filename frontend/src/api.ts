@@ -48,4 +48,11 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
     }).then(r => r.json()),
+
+  createOrder: (description: string, assignedAgentId?: string): Promise<Order> =>
+    fetch(`${BASE}/orders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description, assignedAgentId: assignedAgentId || null }),
+    }).then(r => r.json()),
 }

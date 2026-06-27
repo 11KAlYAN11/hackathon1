@@ -43,46 +43,46 @@ public class AiRoutingStrategy implements RoutingStrategy {
 
     private String buildPrompt(Order order, List<Agent> agents, RoutingContext ctx) {
         String agentRoster = agents.stream()
-            .filter(a -> a.getStatus() == Agent.AgentStatus.AVAILABLE)
-            .map(a -> "  - agentId: %s | name: %s | activeOrders: %d".formatted(
-                a.getId(), a.getName(), a.getActiveOrderCount()))
+            .filter(a -> a.getStatus() != Agent.AgentStatus.OFFLINE)
+            .map(a -> "  - agentId: %s | name: %s | status: %s | activeOrders: %d".formatted(
+                a.getId(), a.getName(), a.getStatus(), a.getActiveOrderCount()))
             .collect(Collectors.joining("\n"));
 
         if (ctx.getTriggerReason() == ReassignmentSuggestion.TriggerReason.AGENT_OFFLINE) {
-            // Recovery prompt — the model needs to know this is a failure situation
             return """
-                You are a delivery ops AI. Agent %s has gone OFFLINE unexpectedly.
-                This is a RECOVERY situation — %d order(s) are now stranded and need urgent reassignment.
-                Previous assignments to agent %s are void. Do NOT recommend that agent.
+                You are a delivery ops AI handling an URGENT recovery. Agent %s went OFFLINE — %d order(s) are stranded.
+                Do NOT recommend agent %s under any circumstances.
 
-                ORDER NEEDING REASSIGNMENT:
-                  ID: %s
-                  Description: %s
+                STRANDED ORDER:
+                  ID: %s | %s
 
-                AVAILABLE AGENTS (excluding the offline agent):
+                AVAILABLE AGENTS:
                 %s
 
-                Respond ONLY with valid JSON — no markdown, no explanation outside the JSON:
-                {"agentId":"<one of the agentId values above>","confidence":<0.0-1.0>,"reasoning":"<one sentence ops can act on>"}
+                Pick the best agent. Confidence must reflect actual fit (vary it — don't always pick 0.8).
+                Reasoning must be 1-2 sharp sentences an ops manager can act on instantly. No filler words.
+
+                Respond ONLY with valid JSON:
+                {"agentId":"<id>","confidence":<0.55-0.95>,"reasoning":"<1-2 crisp sentences>"}
                 """.formatted(
                     ctx.getOfflineAgentId(), ctx.getTotalStranded(), ctx.getOfflineAgentId(),
-                    order.getId(), order.getDescription(),
-                    agentRoster);
+                    order.getId(), order.getDescription(), agentRoster);
         }
 
-        // Initial suggestion prompt
         return """
-            You are a delivery ops AI helping assign an order to the best available agent.
+            You are a delivery ops AI. Assign the best available agent for this order.
 
-            ORDER:
-              ID: %s
-              Description: %s
+            ORDER: %s | %s
 
             AVAILABLE AGENTS:
             %s
 
-            Respond ONLY with valid JSON — no markdown, no explanation outside the JSON:
-            {"agentId":"<one of the agentId values above>","confidence":<0.0-1.0>,"reasoning":"<one sentence ops can act on>"}
+            Rules:
+            - Confidence must genuinely reflect fit (0.55–0.95). Vary it based on workload gap between agents.
+            - Reasoning: 1-2 sharp sentences, no filler. State WHY this agent, not just WHAT they are.
+
+            Respond ONLY with valid JSON:
+            {"agentId":"<id>","confidence":<0.55-0.95>,"reasoning":"<1-2 crisp sentences>"}
             """.formatted(order.getId(), order.getDescription(), agentRoster);
     }
 

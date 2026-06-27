@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -36,9 +37,41 @@ public class OrderService {
             : orderRepository.findAll();
     }
 
-    public Order create(Order order) {
+    /**
+     * POST /orders — create a new order and assign to an available agent.
+     * Body: { "description": "...", "assignedAgentId": "AGT-001" }
+     * If assignedAgentId is omitted, auto-picks the least-loaded available agent.
+     */
+    public Order create(OrderCreateRequest req) {
+        // Auto-generate next ORD-NNN id
+        long count = orderRepository.count();
+        String newId = "ORD-%03d".formatted(count + 1);
+
+        Agent agent;
+        if (req.assignedAgentId() != null && !req.assignedAgentId().isBlank()) {
+            agent = agentRepository.findById(req.assignedAgentId())
+                .orElseThrow(() -> new IllegalArgumentException("Agent not found: " + req.assignedAgentId()));
+        } else {
+            agent = agentRepository.findAll().stream()
+                .filter(a -> a.getStatus() == Agent.AgentStatus.AVAILABLE
+                          || a.getStatus() == Agent.AgentStatus.BUSY)
+                .min(Comparator.comparingInt(Agent::getActiveOrderCount))
+                .orElseThrow(() -> new IllegalStateException("No agents available to assign"));
+        }
+
+        agent.setActiveOrderCount(agent.getActiveOrderCount() + 1);
+        if (agent.getStatus() == Agent.AgentStatus.AVAILABLE) agent.setStatus(Agent.AgentStatus.BUSY);
+        agentRepository.save(agent);
+
+        Order order = new Order();
+        order.setId(newId);
+        order.setDescription(req.description());
+        order.setAssignedAgent(agent);
+        order.setStatus(Order.OrderStatus.ASSIGNED);
         return orderRepository.save(order);
     }
+
+    public record OrderCreateRequest(String description, String assignedAgentId) {}
 
     /** POST /orders/{id}/suggest — on-demand routing via active strategy */
     public ReassignmentSuggestion suggest(String orderId) {

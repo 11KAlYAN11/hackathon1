@@ -50,9 +50,13 @@ public class ReplanningService {
         log.info("Agentic replan triggered: agent {} offline, {} orders stranded",
             offlineAgent.getId(), orderIds.size());
 
-        List<Agent> available = agentRepository.findByStatus(Agent.AgentStatus.AVAILABLE);
+        // Include BUSY agents — AVAILABLE preference is handled inside the routing strategy
+        List<Agent> available = agentRepository.findAll().stream()
+            .filter(a -> a.getStatus() != Agent.AgentStatus.OFFLINE
+                      && !a.getId().equals(offlineAgent.getId()))
+            .toList();
         if (available.isEmpty()) {
-            log.warn("No available agents for replan — suggestions cannot be created");
+            log.warn("No non-offline agents for replan of {} — cannot create suggestions", offlineAgent.getId());
             return;
         }
 
@@ -94,11 +98,19 @@ public class ReplanningService {
         suggestion.setTriggerReason(ReassignmentSuggestion.TriggerReason.AGENT_OFFLINE);
         suggestionRepository.save(suggestion);
 
+        // Optimistically reserve capacity — next order in this loop sees updated count.
+        // Also set BUSY so the sidebar status reflects reality immediately.
+        // Reversed on REJECT; confirmed (no double-count) on ACCEPT.
+        Agent recommended = result.getRecommendedAgent();
+        recommended.setActiveOrderCount(recommended.getActiveOrderCount() + 1);
+        recommended.setStatus(Agent.AgentStatus.BUSY);
+        agentRepository.save(recommended);
+
         order.setStatus(Order.OrderStatus.REASSIGNMENT_PENDING);
         orderRepository.save(order);
 
-        log.info("Replan suggestion created for order {} → agent {}",
-            orderId, result.getRecommendedAgent().getId());
+        log.info("Replan suggestion created for order {} → agent {} (reserved count now {})",
+            orderId, recommended.getId(), recommended.getActiveOrderCount());
     }
 
     private RoutingResult route(Order order, List<Agent> available, RoutingContext ctx) {
